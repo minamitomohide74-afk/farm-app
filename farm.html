@@ -1,1 +1,356 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>農場管理</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0a1a0a;color:#7dba7d;font-family:'Noto Sans JP',sans-serif;max-width:480px;margin:0 auto;min-height:100vh}
+  header{padding:16px 16px 0;border-bottom:1px solid #1a3a1a}
+  .logo{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .logo span:first-child{font-size:22px}
+  .logo span:last-child{font-size:20px;font-weight:700;color:#a0e0a0}
+  .tabs{display:flex}
+  .tab{flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid transparent;color:#4a7a4a;font-family:inherit;font-size:14px;cursor:pointer;transition:color .2s}
+  .tab.active{border-bottom-color:#4caf50;color:#a0e0a0;font-weight:700}
+  .page{display:none;padding:16px}
+  .page.active{display:block}
+  .card{background:#0f1f0f;border:1px solid #1a3a1a;border-radius:10px;padding:14px;margin-bottom:12px}
+  label{display:block;font-size:11px;color:#4a8a4a;margin-bottom:4px}
+  input,select,textarea{width:100%;background:#0a1a0a;border:1px solid #2a4a2a;border-radius:8px;color:#a0e0a0;padding:9px 12px;font-size:14px;font-family:inherit;outline:none}
+  textarea{resize:vertical;line-height:1.6}
+  .row{display:flex;gap:8px;margin-top:10px}
+  .row>div{flex:1}
+  .mt{margin-top:10px}
+  btn-primary,.btn{width:100%;margin-top:12px;padding:11px;background:#1a4a1a;border:1px solid #3a7a3a;border-radius:8px;color:#a0e0a0;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn{display:block}
+  .btn:hover{background:#1f5a1f}
+  .btn-sm{background:none;border:1px solid #2a4a2a;color:#4a7a4a;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;font-family:inherit}
+  .item{display:flex;align-items:center;justify-content:space-between}
+  .item-name{font-weight:700;color:#a0e0a0;font-size:15px}
+  .item-qty{font-size:20px;font-weight:700;margin-top:2px}
+  .item-unit{font-size:13px;margin-left:4px}
+  .item-meta{font-size:11px;color:#4a7a4a;margin-top:4px}
+  .empty{color:#3a5a3a;text-align:center;margin-top:24px;font-size:13px}
+  .summary{display:flex;gap:10px;margin-bottom:16px}
+  .summary .card{flex:1;text-align:center;margin-bottom:0}
+  .sum-label{font-size:11px;color:#4a7a4a}
+  .sum-val{font-size:18px;font-weight:700;color:#a0e0a0;margin-top:4px}
+  .ship-header{display:flex;justify-content:space-between;align-items:flex-start}
+  .price{color:#6dbf6d;font-weight:700}
+  .chart-wrap{position:relative;height:160px}
+  .section-title{font-size:12px;color:#4a8a4a;margin-bottom:10px}
+  .memo-view{min-height:120px;padding:12px;border-radius:8px;background:#0f1f0f;border:1px solid #1a3a1a;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+  .memo-btn-row{display:flex;gap:8px;margin-top:10px}
+  .memo-btn-row .btn{margin-top:0}
+  .memo-list-btn{display:block;width:100%;text-align:left;background:#0f1f0f;border:1px solid #2a4a2a;border-radius:8px;padding:10px 14px;color:#7dba7d;font-size:13px;cursor:pointer;margin-bottom:6px;font-family:inherit}
+  .memo-list-btn.active{background:#1a3a1a}
+  .memo-crop{color:#a0e0a0;font-weight:700}
+  .memo-preview{margin-left:10px;color:#4a7a4a;font-size:11px}
+  .sub-title{color:#4a7a4a;font-size:11px;margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span>🌱</span><span>農場管理</span></div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('zaiko')">在庫</button>
+    <button class="tab" onclick="showTab('shukka')">出荷</button>
+    <button class="tab" onclick="showTab('rekishi')">履歴</button>
+    <button class="tab" onclick="showTab('kanri')">管理</button>
+  </div>
+</header>
+
+<!-- 在庫 -->
+<div id="zaiko" class="page active">
+  <p class="sub-title" style="margin-bottom:12px">現在の在庫</p>
+  <div class="card">
+    <label>作物</label>
+    <select id="inv-crop"></select>
+    <div class="row">
+      <div><label>数量</label><input type="number" id="inv-qty" placeholder="0"></div>
+      <div><label>単位</label>
+        <select id="inv-unit">
+          <option>kg</option><option>g</option><option>本</option><option>個</option><option>袋</option><option>箱</option>
+        </select>
+      </div>
+    </div>
+    <div class="mt"><label>日付</label><input type="date" id="inv-date"></div>
+    <div class="mt"><label>メモ（任意）</label><input id="inv-note" placeholder="例：A圃場収穫"></div>
+    <button class="btn" onclick="addInventory()">＋ 在庫を追加</button>
+  </div>
+  <div id="inv-list"></div>
+</div>
+
+<!-- 出荷 -->
+<div id="shukka" class="page">
+  <p class="sub-title" style="margin-bottom:12px">出荷記録</p>
+  <div class="card">
+    <label>作物</label>
+    <select id="ship-crop"></select>
+    <div class="row">
+      <div><label>数量</label><input type="number" id="ship-qty" placeholder="0"></div>
+      <div><label>単位</label>
+        <select id="ship-unit">
+          <option>kg</option><option>g</option><option>本</option><option>個</option><option>袋</option><option>箱</option>
+        </select>
+      </div>
+    </div>
+    <div class="mt"><label>出荷先</label><input id="ship-dest" placeholder="例：JA、直売所"></div>
+    <div class="row">
+      <div><label>日付</label><input type="date" id="ship-date"></div>
+      <div><label>金額（円）</label><input type="number" id="ship-price" placeholder="0"></div>
+    </div>
+    <button class="btn" onclick="addShipment()">🚚 出荷を記録</button>
+  </div>
+  <div id="ship-list"></div>
+</div>
+
+<!-- 履歴 -->
+<div id="rekishi" class="page">
+  <p class="sub-title" style="margin-bottom:12px">統計・グラフ</p>
+  <div class="summary">
+    <div class="card"><div class="sum-label">総出荷量</div><div class="sum-val" id="total-qty">0 kg</div></div>
+    <div class="card"><div class="sum-label">総売上</div><div class="sum-val" id="total-sales">¥0</div></div>
+  </div>
+  <div class="card">
+    <div class="section-title">直近7日の出荷量</div>
+    <div class="chart-wrap"><canvas id="chart-week"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="section-title">作物別 在庫 vs 出荷</div>
+    <div class="chart-wrap" style="height:200px"><canvas id="chart-crop"></canvas></div>
+  </div>
+</div>
+
+<!-- 管理 -->
+<div id="kanri" class="page">
+  <p class="sub-title" style="margin-bottom:12px">作物メモ</p>
+  <div class="card">
+    <label>作物を選択</label>
+    <select id="memo-crop" onchange="loadMemo()"></select>
+    <div class="mt" id="memo-view-wrap">
+      <div class="memo-view" id="memo-view" style="color:#3a5a3a">メモはまだありません</div>
+      <button class="btn" onclick="startEditMemo()" style="margin-top:10px" id="memo-edit-btn">✏️ メモを追加</button>
+    </div>
+    <div id="memo-edit-wrap" style="display:none">
+      <textarea id="memo-text" rows="8" placeholder="栽培メモ、品種、問題点など"></textarea>
+      <div class="memo-btn-row">
+        <button class="btn" onclick="saveMemo()">💾 保存</button>
+        <button class="btn" onclick="cancelMemo()" style="background:#1a2a1a">キャンセル</button>
+      </div>
+    </div>
+  </div>
+  <p class="sub-title">メモがある作物</p>
+  <div id="memo-list"></div>
+</div>
+
+<script>
+const CROPS = ["にんにく","きゅうり","トマト","なす","ピーマン","レタス","大根","白菜"];
+
+// データ
+let inventory = JSON.parse(localStorage.getItem("fm_inv")||"[]");
+let shipments = JSON.parse(localStorage.getItem("fm_ship")||"[]");
+let memos = JSON.parse(localStorage.getItem("fm_memo")||"{}");
+
+let chartWeek, chartCrop;
+
+function save(){
+  localStorage.setItem("fm_inv", JSON.stringify(inventory));
+  localStorage.setItem("fm_ship", JSON.stringify(shipments));
+  localStorage.setItem("fm_memo", JSON.stringify(memos));
+}
+
+function today(){ return new Date().toISOString().split("T")[0]; }
+function fmtDate(d){ const dt=new Date(d); return (dt.getMonth()+1)+"/"+(dt.getDate()); }
+
+// タブ
+function showTab(id){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  event.target.classList.add("active");
+  if(id==="rekishi") renderCharts();
+}
+
+// 作物セレクト初期化
+function initSelects(){
+  ["inv-crop","ship-crop","memo-crop"].forEach(id=>{
+    const el=document.getElementById(id);
+    el.innerHTML=CROPS.map(c=>`<option>${c}</option>`).join("");
+  });
+  document.getElementById("inv-date").value=today();
+  document.getElementById("ship-date").value=today();
+}
+
+// 在庫
+function addInventory(){
+  const qty=parseFloat(document.getElementById("inv-qty").value);
+  if(!qty) return;
+  inventory.unshift({
+    id:Date.now(),
+    crop:document.getElementById("inv-crop").value,
+    qty,
+    unit:document.getElementById("inv-unit").value,
+    date:document.getElementById("inv-date").value,
+    note:document.getElementById("inv-note").value
+  });
+  save();
+  document.getElementById("inv-qty").value="";
+  document.getElementById("inv-note").value="";
+  renderInv();
+}
+
+function deleteInv(id){
+  inventory=inventory.filter(i=>i.id!==id);
+  save(); renderInv();
+}
+
+function renderInv(){
+  const el=document.getElementById("inv-list");
+  if(!inventory.length){ el.innerHTML='<p class="empty">在庫データがありません</p>'; return; }
+  el.innerHTML=inventory.map(i=>`
+    <div class="card">
+      <div class="item">
+        <div>
+          <div class="item-name">${i.crop}</div>
+          <div class="item-qty">${i.qty}<span class="item-unit">${i.unit}</span></div>
+          <div class="item-meta">${fmtDate(i.date)}${i.note?"　"+i.note:""}</div>
+        </div>
+        <button class="btn-sm" onclick="deleteInv(${i.id})">削除</button>
+      </div>
+    </div>`).join("");
+}
+
+// 出荷
+function addShipment(){
+  const qty=parseFloat(document.getElementById("ship-qty").value);
+  if(!qty) return;
+  shipments.unshift({
+    id:Date.now(),
+    crop:document.getElementById("ship-crop").value,
+    qty,
+    unit:document.getElementById("ship-unit").value,
+    dest:document.getElementById("ship-dest").value,
+    date:document.getElementById("ship-date").value,
+    price:parseFloat(document.getElementById("ship-price").value)||0
+  });
+  save();
+  document.getElementById("ship-qty").value="";
+  document.getElementById("ship-dest").value="";
+  document.getElementById("ship-price").value="";
+  renderShip();
+}
+
+function renderShip(){
+  const el=document.getElementById("ship-list");
+  if(!shipments.length){ el.innerHTML='<p class="empty">出荷記録がありません</p>'; return; }
+  el.innerHTML=shipments.map(s=>`
+    <div class="card">
+      <div class="ship-header">
+        <div><span style="font-weight:700;color:#a0e0a0">${s.crop}</span>
+          <span style="margin-left:8px;font-size:18px;font-weight:700">${s.qty}${s.unit}</span></div>
+        ${s.price>0?`<span class="price">¥${s.price.toLocaleString()}</span>`:""}
+      </div>
+      <div class="item-meta">${fmtDate(s.date)}${s.dest?"　→ "+s.dest:""}</div>
+    </div>`).join("");
+}
+
+// グラフ
+function renderCharts(){
+  // サマリー
+  const totalQty=shipments.reduce((s,i)=>s+i.qty,0);
+  const totalSales=shipments.reduce((s,i)=>s+i.price,0);
+  document.getElementById("total-qty").textContent=totalQty+" kg";
+  document.getElementById("total-sales").textContent="¥"+totalSales.toLocaleString();
+
+  // 直近7日
+  const last7=Array.from({length:7},(_,i)=>{
+    const d=new Date(); d.setDate(d.getDate()-(6-i));
+    const key=d.toISOString().split("T")[0];
+    return {day:fmtDate(key), qty:shipments.filter(s=>s.date===key).reduce((s,i)=>s+i.qty,0)};
+  });
+
+  if(chartWeek) chartWeek.destroy();
+  chartWeek=new Chart(document.getElementById("chart-week"),{
+    type:"bar",
+    data:{labels:last7.map(d=>d.day),datasets:[{label:"出荷量",data:last7.map(d=>d.qty),backgroundColor:"#3a8a3a",borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#4a7a4a"},grid:{display:false}},y:{ticks:{color:"#4a7a4a"},grid:{color:"#1a3a1a"}}}}
+  });
+
+  // 作物別
+  const cropData=CROPS.map(c=>({
+    name:c,
+    inv:inventory.filter(i=>i.crop===c).reduce((s,i)=>s+i.qty,0),
+    ship:shipments.filter(s=>s.crop===c).reduce((s,i)=>s+i.qty,0)
+  })).filter(c=>c.inv>0||c.ship>0);
+
+  if(chartCrop) chartCrop.destroy();
+  if(cropData.length){
+    chartCrop=new Chart(document.getElementById("chart-crop"),{
+      type:"bar",
+      data:{
+        labels:cropData.map(c=>c.name),
+        datasets:[
+          {label:"在庫",data:cropData.map(c=>c.inv),backgroundColor:"#2a6a2a",borderRadius:4},
+          {label:"出荷",data:cropData.map(c=>c.ship),backgroundColor:"#4caf50",borderRadius:4}
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#7dba7d"}}},scales:{x:{ticks:{color:"#7dba7d"},grid:{display:false}},y:{ticks:{color:"#4a7a4a"},grid:{color:"#1a3a1a"}}}}
+    });
+  }
+}
+
+// メモ
+function loadMemo(){
+  const crop=document.getElementById("memo-crop").value;
+  const text=memos[crop]||"";
+  document.getElementById("memo-view").textContent=text||"メモはまだありません";
+  document.getElementById("memo-view").style.color=text?"#a0e0a0":"#3a5a3a";
+  document.getElementById("memo-edit-btn").textContent=text?"✏️ 編集":"✏️ メモを追加";
+  cancelMemo();
+  renderMemoList();
+}
+
+function startEditMemo(){
+  const crop=document.getElementById("memo-crop").value;
+  document.getElementById("memo-text").value=memos[crop]||"";
+  document.getElementById("memo-view-wrap").style.display="none";
+  document.getElementById("memo-edit-wrap").style.display="block";
+}
+
+function saveMemo(){
+  const crop=document.getElementById("memo-crop").value;
+  memos[crop]=document.getElementById("memo-text").value;
+  save(); loadMemo();
+}
+
+function cancelMemo(){
+  document.getElementById("memo-view-wrap").style.display="block";
+  document.getElementById("memo-edit-wrap").style.display="none";
+}
+
+function renderMemoList(){
+  const el=document.getElementById("memo-list");
+  const hasMemo=CROPS.filter(c=>memos[c]);
+  if(!hasMemo.length){ el.innerHTML='<p class="empty" style="margin-top:0">まだありません</p>'; return; }
+  const cur=document.getElementById("memo-crop").value;
+  el.innerHTML=hasMemo.map(c=>`
+    <button class="memo-list-btn ${c===cur?"active":""}" onclick="document.getElementById('memo-crop').value='${c}';loadMemo()">
+      <span class="memo-crop">🌿 ${c}</span>
+      <span class="memo-preview">${memos[c].slice(0,30)}${memos[c].length>30?"…":""}</span>
+    </button>`).join("");
+}
+
+// 初期化
+initSelects();
+renderInv();
+renderShip();
+loadMemo();
+</script>
+</body>
+    </html>
