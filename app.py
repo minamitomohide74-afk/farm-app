@@ -11,6 +11,10 @@ def sv(d):
 @app.route("/")
 def idx():
     return open("farm.html",encoding="utf-8").read()
+
+@app.route("/pest-risk")
+def pest_risk():
+    return open("pest_risk.html",encoding="utf-8").read()
 @app.route("/api/data")
 def get():
     return jsonify(ld())
