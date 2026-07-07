@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>病害虫リスク予報</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a1a0a;color:#7dba7d;font-family:'Noto Sans JP',sans-serif;max-width:480px;margin:0 auto;min-height:100vh}
+header{padding:16px 16px 0;border-bottom:1px solid #1a3a1a}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.logo span:first-child{font-size:22px}
+.logo span:last-child{font-size:20px;font-weight:700;color:#a0e0a0}
+.sub{font-size:12px;color:#4a7a4a;padding-bottom:14px}
+.page{padding:16px}
+.loading{text-align:center;padding:40px;color:#4a7a4a;font-size:14px}
+.error{background:#3a1a1a;color:#e08080;padding:14px;border-radius:8px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:16px;padding-bottom:4px}
+.tab{flex:0 0 auto;min-width:52px;padding:10px 8px;border-radius:8px;border:1px solid #1a3a1a;background:#0f1f0f;color:#7dba7d;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:700;cursor:pointer}
+.tab.active{background:#1a3a1a;border-color:#4caf50;color:#a0e0a0}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.summary{display:flex;justify-content:space-between;background:#0f1f0f;border:1px solid #1a3a1a;border-radius:10px;padding:14px;margin-bottom:20px}
+.summary .label{font-size:11px;color:#4a7a4a}
+.summary .value{font-size:17px;font-weight:700;color:#a0e0a0}
+.section-label{font-size:12px;font-weight:700;color:#4a7a4a;margin-bottom:10px;letter-spacing:1px}
+.risk-card{display:flex;gap:12px;padding:14px;margin-bottom:8px;border-radius:8px;border:1px solid #1a3a1a}
+.risk-card .name{font-weight:700;font-size:15px;color:#e8f5e8}
+.risk-card .crop{font-size:12px;color:#4a7a4a;margin-bottom:4px}
+.risk-card .advice{font-size:13px;line-height:1.5;color:#a8c8a8}
+.badge{font-size:11px;font-weight:800;color:#0a1a0a;padding:2px 10px;border-radius:999px;flex-shrink:0}
+.row-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.refresh{display:block;margin:20px auto 0;border:1px solid #1a3a1a;background:none;color:#4a7a4a;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer}
+a.back{color:#4a7a4a;font-size:13px;text-decoration:none;display:inline-block;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span>🌱</span><span>病害虫リスク予報</span></div>
+  <div class="sub">北島町 / にんにく・ズッキーニ 7日間ガイド</div>
+</header>
+<div class="page" id="app">
+  <div class="loading">気象データを取得中...</div>
+</div>
+
+<script>
+const LAT = 34.155, LON = 134.58;
+
+const RULES = [
+  {key:"botrytis",name:"灰色かび病",crop:"にんにく",
+   advice:"多湿・曇雨天が続くと発生しやすい。密植部の風通し確認、罹病葉の早期除去を。",
+   check:(t,h,r)=> (h>=80?2:h>=70?1:0) + (t>=15&&t<=22?1:0) + (r>3?1:0)},
+  {key:"rust",name:"さび病",crop:"にんにく",
+   advice:"冷涼多湿な日が続くと胞子が広がりやすい。葉の裏のオレンジ色斑点を定期チェック。",
+   check:(t,h,r)=> (h>=70?1:0) + (t>=15&&t<=20?2:0) + (r>0?1:0)},
+  {key:"powdery",name:"うどんこ病",crop:"ズッキーニ",
+   advice:"乾燥・高温が続くと発生しやすい。朝夕の葉の白い粉状カビに注意、株間を広めに。",
+   check:(t,h,r)=> (h<=60?1:0) + (t>=20&&t<=28?2:0) + (r===0?1:0)},
+  {key:"aphid",name:"アブラムシ",crop:"共通",
+   advice:"気温上昇・小雨の日が続くと増殖しやすい。新芽・葉裏を重点的に見回り。",
+   check:(t,h,r)=> (t>=15&&t<=25?2:0) + (r<2?1:0)},
+  {key:"thrips",name:"アザミウマ",crop:"共通",
+   advice:"高温乾燥で活動が活発化。花・新葉の食害痕、シルバーリング症状に注意。",
+   check:(t,h,r)=> (t>=25?2:0) + (h<=55?1:0)},
+];
+
+function level(score){
+  if(score>=3) return {label:"高",color:"#e08080"};
+  if(score>=2) return {label:"中",color:"#e0c080"};
+  return {label:"低",color:"#7dba7d"};
+}
+
+function fmtDate(dateStr){
+  const d = new Date(dateStr+"T00:00:00+09:00");
+  const w = ["日","月","火","水","木","金","土"];
+  return `${d.getMonth()+1}/${d.getDate()}(${w[d.getDay()]})`;
+}
+
+let daysData = [];
+let selected = 0;
+
+async function loadForecast(){
+  const app = document.getElementById("app");
+  app.innerHTML = '<div class="loading">気象データを取得中...</div>';
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,relative_humidity_2m,precipitation&timezone=Asia%2FTokyo&forecast_days=7`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("気象データの取得に失敗しました");
+    const data = await res.json();
+
+    const times = data.hourly.time;
+    const temps = data.hourly.temperature_2m;
+    const hums = data.hourly.relative_humidity_2m;
+    const rains = data.hourly.precipitation;
+
+    const byDate = {};
+    times.forEach((t,i)=>{
+      const date = t.slice(0,10);
+      if(!byDate[date]) byDate[date] = {temps:[],hums:[],rains:[]};
+      byDate[date].temps.push(temps[i]);
+      byDate[date].hums.push(hums[i]);
+      byDate[date].rains.push(rains[i]||0);
+    });
+
+    daysData = Object.keys(byDate).slice(0,7).map(date=>{
+      const d = byDate[date];
+      const tempAvg = d.temps.reduce((a,b)=>a+b,0)/d.temps.length;
+      const tempMax = Math.max(...d.temps);
+      const tempMin = Math.min(...d.temps);
+      const humidity = d.hums.reduce((a,b)=>a+b,0)/d.hums.length;
+      const rain = d.rains.reduce((a,b)=>a+b,0);
+      const risks = RULES.map(rule=>({...rule, score: rule.check(tempAvg,humidity,rain)}))
+                          .sort((a,b)=>b.score-a.score);
+      return {date, tempAvg, tempMax, tempMin, humidity, rain, risks};
+    });
+
+    selected = 0;
+    render();
+  }catch(e){
+    app.innerHTML = `<div class="error"><span>${e.message||"エラーが発生しました"}</span></div>`;
+  }
+}
+
+function render(){
+  const app = document.getElementById("app");
+  let tabsHtml = daysData.map((d,i)=>{
+    const top = d.risks[0];
+    const lv = level(top.score);
+    return `<div class="tab ${i===selected?'active':''}" onclick="selectDay(${i})">
+      <span>${fmtDate(d.date)}</span>
+      <span class="dot" style="background:${lv.color}"></span>
+    </div>`;
+  }).join("");
+
+  const d = daysData[selected];
+  let risksHtml = d.risks.map(r=>{
+    const lv = level(r.score);
+    return `<div class="risk-card">
+      <div style="flex:1">
+        <div class="row-top">
+          <span class="name">${r.name}</span>
+          <span class="badge" style="background:${lv.color}">${lv.label}</span>
+        </div>
+        <div class="crop">${r.crop}</div>
+        <div class="advice">${r.advice}</div>
+      </div>
+    </div>`;
+  }).join("");
+
+  app.innerHTML = `
+    <div class="tabs">${tabsHtml}</div>
+    <div class="summary">
+      <div><div class="label">気温</div><div class="value">${d.tempMin.toFixed(0)}〜${d.tempMax.toFixed(0)}℃</div></div>
+      <div><div class="label">湿度平均</div><div class="value">${d.humidity.toFixed(0)}%</div></div>
+      <div><div class="label">降水量</div><div class="value">${d.rain.toFixed(1)}mm</div></div>
+    </div>
+    <div class="section-label">RISK CHECK</div>
+    ${risksHtml}
+    <button class="refresh" onclick="loadForecast()">最新データに更新</button>
+    <a class="back" href="/">← 農場管理トップへ</a>
+  `;
+}
+
+function selectDay(i){ selected = i; render(); }
+
+loadForecast();
+</script>
+</body>
+</html>
